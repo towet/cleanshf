@@ -51,7 +51,9 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <Hero />
-      <JobsSection onApply={handleApply} />
+      <section id="jobs">
+        <JobsSection onApply={handleApply} />
+      </section>
       <QualificationsSection />
       <AboutSection />
       

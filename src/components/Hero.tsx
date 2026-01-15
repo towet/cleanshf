@@ -5,7 +5,7 @@ import heroImage from "@/assets/hero-workers.jpg";
 
 const Hero = () => {
   const scrollToApply = () => {
-    const element = document.getElementById("apply");
+    const element = document.getElementById("jobs");
     if (element) {
       element.scrollIntoView({ behavior: "smooth" });
     }
@@ -97,21 +97,23 @@ const Hero = () => {
             >
               View Open Positions
             </Button>
-            <a
-              href="https://wa.me/254105575260"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button
-                variant="glass"
-                size="xl"
-                className="text-white border-white/30 hover:bg-white/20 w-full"
-              >
-                <MessageCircle className="w-5 h-5" />
-                Talk to Us
-              </Button>
-            </a>
           </motion.div>
+
+          <a
+            href="https://wa.me/254105575260"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="fixed z-50 right-4 bottom-4 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2"
+          >
+            <Button
+              variant="outline"
+              size="lg"
+              className="rounded-full px-6 bg-transparent text-white border-white/30 hover:bg-transparent active:bg-transparent hover:text-white hover:border-white/60"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Talk to Us
+            </Button>
+          </a>
 
           {/* Stats */}
           <motion.div
