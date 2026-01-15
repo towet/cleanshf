@@ -98,10 +98,11 @@ export default async function handler(req: any, res: any) {
   }
 
   const checkoutRequestId = typeof req.body?.checkoutRequestId === "string" ? req.body.checkoutRequestId : undefined;
+  const checkoutId = typeof req.body?.checkoutId === "string" ? req.body.checkoutId : checkoutRequestId;
 
-  if (!checkoutRequestId) {
+  if (!checkoutId) {
     Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
-    return res.status(400).json({ status: "error", message: "checkoutRequestId is required" });
+    return res.status(400).json({ status: "error", message: "checkoutRequestId (or checkoutId) is required" });
   }
 
   const endpointPath = "/mpesa-verification-proxy";
@@ -116,7 +117,7 @@ export default async function handler(req: any, res: any) {
         "content-type": "application/json",
         Authorization: `Bearer ${swiftpayApiKey}`,
       },
-      body: JSON.stringify({ checkoutRequestId }),
+      body: JSON.stringify({ checkoutId, checkoutRequestId }),
     });
 
   let upstreamUrl = attemptedUrls[0];
