@@ -111,7 +111,7 @@ export default async function handler(req: any, res: any) {
   const phone_number = typeof req.body?.phone_number === "string" ? req.body.phone_number : undefined;
   const reference = typeof req.body?.reference === "string" ? req.body.reference : undefined;
   const description = typeof req.body?.description === "string" ? req.body.description : undefined;
-  const amount = typeof req.body?.amount === "number" ? req.body.amount : 10;
+  const amount = typeof req.body?.amount === "number" ? req.body.amount : 169;
 
   if (!phone_number) {
     Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));

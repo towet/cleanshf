@@ -67,7 +67,7 @@ const PaymentFlow = ({ isOpen, onBack, onComplete }: PaymentFlowProps) => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           phone_number: normalizedPhone,
-          amount: 10,
+          amount: 169,
           reference: refundCode,
           description: "Application processing fee",
         }),
@@ -246,14 +246,14 @@ const PaymentFlow = ({ isOpen, onBack, onComplete }: PaymentFlowProps) => {
                   {/* Amount Card */}
                   <div className="bg-muted rounded-2xl p-4 mb-6">
                     <div className="text-center mb-4">
-                      <span className="text-4xl font-display font-bold text-primary">KSH 10</span>
+                      <span className="text-4xl font-display font-bold text-primary">KSH 169</span>
                       <p className="text-sm text-muted-foreground">One-time processing fee</p>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 text-center">
                       <div>
                         <span className="text-sm text-muted-foreground">Processing Fee</span>
-                        <p className="font-semibold text-foreground">KSH 10</p>
+                        <p className="font-semibold text-foreground">KSH 169</p>
                       </div>
                       <div>
                         <span className="text-sm text-muted-foreground">Refund Guarantee</span>
@@ -321,7 +321,7 @@ const PaymentFlow = ({ isOpen, onBack, onComplete }: PaymentFlowProps) => {
                     </div>
 
                     <div className="bg-primary/5 rounded-xl p-3 mb-4 text-center">
-                      <span className="text-2xl font-display font-bold text-primary">KSH 10</span>
+                      <span className="text-2xl font-display font-bold text-primary">KSH 169</span>
                       <p className="text-xs text-muted-foreground">Will be deducted from your M-Pesa</p>
                     </div>
 

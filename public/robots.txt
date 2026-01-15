@@ -12,3 +12,5 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+Sitemap: https://www.cleanshelfcareeropportunities.site/sitemap.xml
