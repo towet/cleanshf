@@ -28,6 +28,32 @@ function extractMessage(obj: unknown): string | undefined {
   return typeof msg === "string" && msg.trim() !== "" ? msg : undefined;
 }
 
+function extractCheckoutRequestId(obj: unknown): string | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+
+  const anyObj = obj as Record<string, unknown>;
+  const direct =
+    anyObj.checkoutRequestId ??
+    anyObj.checkout_request_id ??
+    anyObj.CheckoutRequestId ??
+    anyObj.CheckoutRequestID ??
+    anyObj.CheckoutRequestID ??
+    anyObj.CheckoutRequestID;
+
+  if (typeof direct === "string" && direct.trim() !== "") return direct;
+
+  const body = anyObj.Body;
+  if (body && typeof body === "object") {
+    const stkCallback = (body as Record<string, unknown>).stkCallback;
+    if (stkCallback && typeof stkCallback === "object") {
+      const nested = (stkCallback as Record<string, unknown>).CheckoutRequestID;
+      if (typeof nested === "string" && nested.trim() !== "") return nested;
+    }
+  }
+
+  return undefined;
+}
+
 function uniqueStrings(values: string[]): string[] {
   const out: string[] = [];
   for (const v of values) {
@@ -109,6 +135,15 @@ export default async function handler(req: any, res: any) {
     return res
       .status(upstreamRes.status)
       .json({ status: "error", message, upstreamUrl, attemptedUrls, upstream: upstreamJson });
+  }
+
+  const checkoutRequestId = extractCheckoutRequestId(upstreamJson);
+
+  if (checkoutRequestId) {
+    if (upstreamJson && typeof upstreamJson === "object") {
+      return res.status(200).json({ ...(upstreamJson as Record<string, unknown>), checkoutRequestId });
+    }
+    return res.status(200).json({ checkoutRequestId, upstream: upstreamJson });
   }
 
   return res.status(200).json(upstreamJson);
