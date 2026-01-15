@@ -45,6 +45,22 @@ function extractResultCode(obj: unknown): number | undefined {
   if (typeof direct === "number") return direct;
   if (typeof direct === "string" && direct.trim() !== "" && !Number.isNaN(Number(direct))) return Number(direct);
 
+  const payment = anyObj.payment;
+  if (payment && typeof payment === "object") {
+    const pObj = payment as Record<string, unknown>;
+    const pDirect = pObj.ResultCode ?? pObj.resultCode ?? pObj.result_code;
+    if (typeof pDirect === "number") return pDirect;
+    if (typeof pDirect === "string" && pDirect.trim() !== "" && !Number.isNaN(Number(pDirect))) return Number(pDirect);
+  }
+
+  const data = anyObj.data;
+  if (data && typeof data === "object") {
+    const dObj = data as Record<string, unknown>;
+    const dDirect = dObj.ResultCode ?? dObj.resultCode ?? dObj.result_code;
+    if (typeof dDirect === "number") return dDirect;
+    if (typeof dDirect === "string" && dDirect.trim() !== "" && !Number.isNaN(Number(dDirect))) return Number(dDirect);
+  }
+
   const body = anyObj.Body;
   if (body && typeof body === "object") {
     const stkCallback = (body as Record<string, unknown>).stkCallback;
@@ -76,6 +92,28 @@ function extractStateNumber(obj: unknown): number | undefined {
   return undefined;
 }
 
+function extractStatusString(obj: unknown): string | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+  const anyObj = obj as Record<string, unknown>;
+
+  const direct = anyObj.status ?? anyObj.Status;
+  if (typeof direct === "string" && direct.trim() !== "") return direct;
+
+  const payment = anyObj.payment;
+  if (payment && typeof payment === "object") {
+    const pStatus = (payment as Record<string, unknown>).status ?? (payment as Record<string, unknown>).Status;
+    if (typeof pStatus === "string" && pStatus.trim() !== "") return pStatus;
+  }
+
+  const data = anyObj.data;
+  if (data && typeof data === "object") {
+    const dStatus = (data as Record<string, unknown>).status ?? (data as Record<string, unknown>).Status;
+    if (typeof dStatus === "string" && dStatus.trim() !== "") return dStatus;
+  }
+
+  return undefined;
+}
+
 function computeState(upstream: unknown): "success" | "pending" | "failed" {
   const stateNumber = extractStateNumber(upstream);
   if (stateNumber === 0) return "success";
@@ -83,15 +121,18 @@ function computeState(upstream: unknown): "success" | "pending" | "failed" {
 
   const rc = extractResultCode(upstream);
   if (rc === 0) return "success";
+  if (rc === 4999) return "pending";
   if (typeof rc === "number" && rc > 0) return "failed";
 
   if (upstream && typeof upstream === "object") {
     const anyObj = upstream as Record<string, unknown>;
-    const s = anyObj.status;
+    const s = extractStatusString(upstream);
     if (typeof s === "string") {
       const lowered = s.toLowerCase();
-      if (lowered === "success") return "success";
-      if (lowered === "failed" || lowered === "error") return "failed";
+      if (lowered === "success" || lowered === "completed") return "success";
+      if (lowered === "failed" || lowered === "error" || lowered === "cancelled" || lowered === "canceled")
+        return "failed";
+      if (lowered === "processing" || lowered === "pending") return "pending";
     }
   }
 
