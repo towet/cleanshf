@@ -1,0 +1,104 @@
+const corsHeaders: Record<string, string> = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "content-type, authorization",
+  "access-control-allow-methods": "POST, OPTIONS",
+};
+
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
+function safeJsonParse(text: string): unknown {
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { raw: text };
+  }
+}
+
+function extractResultCode(obj: unknown): number | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+
+  const anyObj = obj as Record<string, unknown>;
+
+  const direct = anyObj.ResultCode ?? anyObj.resultCode ?? anyObj.result_code;
+  if (typeof direct === "number") return direct;
+  if (typeof direct === "string" && direct.trim() !== "" && !Number.isNaN(Number(direct))) return Number(direct);
+
+  const body = anyObj.Body;
+  if (body && typeof body === "object") {
+    const stkCallback = (body as Record<string, unknown>).stkCallback;
+    if (stkCallback && typeof stkCallback === "object") {
+      const nested = (stkCallback as Record<string, unknown>).ResultCode;
+      if (typeof nested === "number") return nested;
+      if (typeof nested === "string" && nested.trim() !== "" && !Number.isNaN(Number(nested))) return Number(nested);
+    }
+  }
+
+  return undefined;
+}
+
+function computeState(upstream: unknown): "success" | "pending" | "failed" {
+  const rc = extractResultCode(upstream);
+  if (rc === 0) return "success";
+  if (typeof rc === "number" && rc > 0) return "failed";
+
+  if (upstream && typeof upstream === "object") {
+    const anyObj = upstream as Record<string, unknown>;
+    const s = anyObj.status;
+    if (typeof s === "string") {
+      const lowered = s.toLowerCase();
+      if (lowered === "success") return "success";
+      if (lowered === "failed" || lowered === "error") return "failed";
+    }
+  }
+
+  return "pending";
+}
+
+export default async function handler(req: any, res: any) {
+  if (req.method === "OPTIONS") {
+    Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(200).send("ok");
+  }
+
+  if (req.method !== "POST") {
+    Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(405).json({ status: "error", message: "Method not allowed" });
+  }
+
+  const swiftpayApiKey = process.env.SWIFTPAY_API_KEY;
+  const swiftpayBaseUrl = process.env.SWIFTPAY_BASE_URL ?? "https://swiftpay-backend-uvv9.onrender.com";
+
+  if (!swiftpayApiKey) {
+    Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(500).json({ status: "error", message: "Missing server configuration" });
+  }
+
+  const checkoutRequestId = typeof req.body?.checkoutRequestId === "string" ? req.body.checkoutRequestId : undefined;
+
+  if (!checkoutRequestId) {
+    Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(400).json({ status: "error", message: "checkoutRequestId is required" });
+  }
+
+  const upstreamRes = await fetch(`${swiftpayBaseUrl}/mpesa-verification-proxy`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${swiftpayApiKey}`,
+    },
+    body: JSON.stringify({ checkoutRequestId }),
+  });
+
+  const upstreamText = await upstreamRes.text();
+  const upstreamJson = safeJsonParse(upstreamText);
+
+  Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+
+  if (!upstreamRes.ok) {
+    return res.status(upstreamRes.status).json({ state: "failed", upstream: upstreamJson });
+  }
+
+  return res.status(200).json({ state: computeState(upstreamJson), upstream: upstreamJson });
+}
