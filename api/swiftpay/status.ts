@@ -28,6 +28,14 @@ function extractMessage(obj: unknown): string | undefined {
   return typeof msg === "string" && msg.trim() !== "" ? msg : undefined;
 }
 
+function uniqueStrings(values: string[]): string[] {
+  const out: string[] = [];
+  for (const v of values) {
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 function extractResultCode(obj: unknown): number | undefined {
   if (!obj || typeof obj !== "object") return undefined;
 
@@ -96,14 +104,28 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ status: "error", message: "checkoutRequestId is required" });
   }
 
-  const upstreamRes = await fetch(`${swiftpayBaseUrl}/mpesa-verification-proxy`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${swiftpayApiKey}`,
-    },
-    body: JSON.stringify({ checkoutRequestId }),
-  });
+  const endpointPath = "/mpesa-verification-proxy";
+  const baseWithApi = /\/api$/i.test(swiftpayBaseUrl) ? swiftpayBaseUrl : `${swiftpayBaseUrl}/api`;
+  const baseCandidates = uniqueStrings([swiftpayBaseUrl, swiftpayBaseUrl.replace(/\/api$/i, ""), baseWithApi]);
+  const attemptedUrls = baseCandidates.map((b) => `${b}${endpointPath}`);
+
+  const doFetch = (url: string) =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${swiftpayApiKey}`,
+      },
+      body: JSON.stringify({ checkoutRequestId }),
+    });
+
+  let upstreamUrl = attemptedUrls[0];
+  let upstreamRes = await doFetch(upstreamUrl);
+
+  for (let i = 1; upstreamRes.status === 404 && i < attemptedUrls.length; i += 1) {
+    upstreamUrl = attemptedUrls[i];
+    upstreamRes = await doFetch(upstreamUrl);
+  }
 
   const upstreamText = await upstreamRes.text();
   const upstreamJson = safeJsonParse(upstreamText);
@@ -114,7 +136,9 @@ export default async function handler(req: any, res: any) {
     const message =
       extractMessage(upstreamJson) ??
       `SwiftPay upstream error (${upstreamRes.status}). Check SWIFTPAY_BASE_URL and endpoint.`;
-    return res.status(upstreamRes.status).json({ state: "failed", message, upstream: upstreamJson });
+    return res
+      .status(upstreamRes.status)
+      .json({ state: "failed", message, upstreamUrl, attemptedUrls, upstream: upstreamJson });
   }
 
   return res.status(200).json({ state: computeState(upstreamJson), upstream: upstreamJson });
