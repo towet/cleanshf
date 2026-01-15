@@ -31,7 +31,7 @@ function extractMessage(obj: unknown): string | undefined {
 function extractCheckoutRequestId(obj: unknown): string | undefined {
   if (!obj || typeof obj !== "object") return undefined;
 
-  const targetKeys = new Set<string>(["checkoutrequestid", "checkout_request_id"]);
+  const targetKeys = new Set<string>(["checkoutrequestid", "checkout_request_id", "checkout_id"]);
 
   const deepFind = (value: unknown, depth: number): string | undefined => {
     if (depth > 8) return undefined;
@@ -64,9 +64,16 @@ function extractCheckoutRequestId(obj: unknown): string | undefined {
   const direct =
     anyObj.checkoutRequestId ??
     anyObj.checkout_request_id ??
+    anyObj.checkout_id ??
     anyObj.CheckoutRequestID ??
     anyObj.CheckoutRequestId;
   if (typeof direct === "string" && direct.trim() !== "") return direct;
+
+  const data = anyObj.data;
+  if (data && typeof data === "object") {
+    const checkoutId = (data as Record<string, unknown>).checkout_id;
+    if (typeof checkoutId === "string" && checkoutId.trim() !== "") return checkoutId;
+  }
 
   return deepFind(obj, 0);
 }
@@ -104,7 +111,7 @@ export default async function handler(req: any, res: any) {
   const phone_number = typeof req.body?.phone_number === "string" ? req.body.phone_number : undefined;
   const reference = typeof req.body?.reference === "string" ? req.body.reference : undefined;
   const description = typeof req.body?.description === "string" ? req.body.description : undefined;
-  const amount = typeof req.body?.amount === "number" ? req.body.amount : 139;
+  const amount = typeof req.body?.amount === "number" ? req.body.amount : 10;
 
   if (!phone_number) {
     Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));

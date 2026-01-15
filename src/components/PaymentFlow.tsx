@@ -67,7 +67,7 @@ const PaymentFlow = ({ isOpen, onBack, onComplete }: PaymentFlowProps) => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           phone_number: normalizedPhone,
-          amount: 139,
+          amount: 10,
           reference: refundCode,
           description: "Application processing fee",
         }),
@@ -246,14 +246,14 @@ const PaymentFlow = ({ isOpen, onBack, onComplete }: PaymentFlowProps) => {
                   {/* Amount Card */}
                   <div className="bg-muted rounded-2xl p-4 mb-6">
                     <div className="text-center mb-4">
-                      <span className="text-4xl font-display font-bold text-primary">KSH 139</span>
+                      <span className="text-4xl font-display font-bold text-primary">KSH 10</span>
                       <p className="text-sm text-muted-foreground">One-time processing fee</p>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 text-center">
                       <div>
                         <span className="text-sm text-muted-foreground">Processing Fee</span>
-                        <p className="font-semibold text-foreground">KSH 139</p>
+                        <p className="font-semibold text-foreground">KSH 10</p>
                       </div>
                       <div>
                         <span className="text-sm text-muted-foreground">Refund Guarantee</span>
@@ -316,14 +316,12 @@ const PaymentFlow = ({ isOpen, onBack, onComplete }: PaymentFlowProps) => {
                       </div>
                       <div>
                         <span className="font-semibold text-foreground">M-Pesa Payment</span>
-                        <p className="text-xs text-muted-foreground">
-                          Enter your phone number to receive STK push
-                        </p>
+                        <p className="text-xs text-muted-foreground">Enter your phone number to receive STK push</p>
                       </div>
                     </div>
 
                     <div className="bg-primary/5 rounded-xl p-3 mb-4 text-center">
-                      <span className="text-2xl font-display font-bold text-primary">KSH 139</span>
+                      <span className="text-2xl font-display font-bold text-primary">KSH 10</span>
                       <p className="text-xs text-muted-foreground">Will be deducted from your M-Pesa</p>
                     </div>
 
@@ -336,18 +334,14 @@ const PaymentFlow = ({ isOpen, onBack, onComplete }: PaymentFlowProps) => {
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         className="text-lg"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Enter the phone number registered with M-Pesa
-                      </p>
+                      <p className="text-xs text-muted-foreground">Enter the phone number registered with M-Pesa</p>
                     </div>
 
                     <div className="flex items-center gap-2 p-3 bg-muted rounded-xl mb-4">
                       <Shield className="w-5 h-5 text-primary" />
                       <div>
                         <span className="text-sm font-medium text-foreground">Secure Payment Process</span>
-                        <p className="text-xs text-muted-foreground">
-                          You'll receive an STK push notification
-                        </p>
+                        <p className="text-xs text-muted-foreground">You'll receive an STK push notification</p>
                       </div>
                     </div>
                   </div>
