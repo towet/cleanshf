@@ -31,27 +31,44 @@ function extractMessage(obj: unknown): string | undefined {
 function extractCheckoutRequestId(obj: unknown): string | undefined {
   if (!obj || typeof obj !== "object") return undefined;
 
+  const targetKeys = new Set<string>(["checkoutrequestid", "checkout_request_id"]);
+
+  const deepFind = (value: unknown, depth: number): string | undefined => {
+    if (depth > 8) return undefined;
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = deepFind(item, depth + 1);
+        if (found) return found;
+      }
+      return undefined;
+    }
+
+    if (!value || typeof value !== "object") return undefined;
+
+    const rec = value as Record<string, unknown>;
+    for (const [k, v] of Object.entries(rec)) {
+      const key = k.toLowerCase();
+      if (targetKeys.has(key)) {
+        if (typeof v === "string" && v.trim() !== "") return v;
+      }
+
+      const nested = deepFind(v, depth + 1);
+      if (nested) return nested;
+    }
+
+    return undefined;
+  };
+
   const anyObj = obj as Record<string, unknown>;
   const direct =
     anyObj.checkoutRequestId ??
     anyObj.checkout_request_id ??
-    anyObj.CheckoutRequestId ??
     anyObj.CheckoutRequestID ??
-    anyObj.CheckoutRequestID ??
-    anyObj.CheckoutRequestID;
-
+    anyObj.CheckoutRequestId;
   if (typeof direct === "string" && direct.trim() !== "") return direct;
 
-  const body = anyObj.Body;
-  if (body && typeof body === "object") {
-    const stkCallback = (body as Record<string, unknown>).stkCallback;
-    if (stkCallback && typeof stkCallback === "object") {
-      const nested = (stkCallback as Record<string, unknown>).CheckoutRequestID;
-      if (typeof nested === "string" && nested.trim() !== "") return nested;
-    }
-  }
-
-  return undefined;
+  return deepFind(obj, 0);
 }
 
 function uniqueStrings(values: string[]): string[] {
