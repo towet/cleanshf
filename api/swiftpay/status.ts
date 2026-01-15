@@ -58,7 +58,29 @@ function extractResultCode(obj: unknown): number | undefined {
   return undefined;
 }
 
+function extractStateNumber(obj: unknown): number | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+
+  const anyObj = obj as Record<string, unknown>;
+  const direct = anyObj.state ?? anyObj.State;
+  if (typeof direct === "number") return direct;
+  if (typeof direct === "string" && direct.trim() !== "" && !Number.isNaN(Number(direct))) return Number(direct);
+
+  const data = anyObj.data;
+  if (data && typeof data === "object") {
+    const nested = (data as Record<string, unknown>).state ?? (data as Record<string, unknown>).State;
+    if (typeof nested === "number") return nested;
+    if (typeof nested === "string" && nested.trim() !== "" && !Number.isNaN(Number(nested))) return Number(nested);
+  }
+
+  return undefined;
+}
+
 function computeState(upstream: unknown): "success" | "pending" | "failed" {
+  const stateNumber = extractStateNumber(upstream);
+  if (stateNumber === 0) return "success";
+  if (typeof stateNumber === "number" && stateNumber > 0) return "failed";
+
   const rc = extractResultCode(upstream);
   if (rc === 0) return "success";
   if (typeof rc === "number" && rc > 0) return "failed";
