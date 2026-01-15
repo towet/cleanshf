@@ -8,12 +8,24 @@ declare const process: {
   env: Record<string, string | undefined>;
 };
 
+function normalizeBaseUrl(input: string): string {
+  const trimmed = input.trim();
+  return trimmed.replace(/\/+$/g, "");
+}
+
 function safeJsonParse(text: string): unknown {
   try {
     return text ? JSON.parse(text) : {};
   } catch {
     return { raw: text };
   }
+}
+
+function extractMessage(obj: unknown): string | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+  const anyObj = obj as Record<string, unknown>;
+  const msg = anyObj.message ?? anyObj.Message ?? anyObj.error;
+  return typeof msg === "string" && msg.trim() !== "" ? msg : undefined;
 }
 
 function extractResultCode(obj: unknown): number | undefined {
@@ -68,7 +80,9 @@ export default async function handler(req: any, res: any) {
   }
 
   const swiftpayApiKey = process.env.SWIFTPAY_API_KEY;
-  const swiftpayBaseUrl = process.env.SWIFTPAY_BASE_URL ?? "https://swiftpay-backend-uvv9.onrender.com";
+  const swiftpayBaseUrl = normalizeBaseUrl(
+    process.env.SWIFTPAY_BASE_URL ?? "https://swiftpay-backend-uvv9.onrender.com"
+  );
 
   if (!swiftpayApiKey) {
     Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
@@ -97,7 +111,10 @@ export default async function handler(req: any, res: any) {
   Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
 
   if (!upstreamRes.ok) {
-    return res.status(upstreamRes.status).json({ state: "failed", upstream: upstreamJson });
+    const message =
+      extractMessage(upstreamJson) ??
+      `SwiftPay upstream error (${upstreamRes.status}). Check SWIFTPAY_BASE_URL and endpoint.`;
+    return res.status(upstreamRes.status).json({ state: "failed", message, upstream: upstreamJson });
   }
 
   return res.status(200).json({ state: computeState(upstreamJson), upstream: upstreamJson });
