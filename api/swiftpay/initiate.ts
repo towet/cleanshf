@@ -123,6 +123,9 @@ export default async function handler(req: any, res: any) {
   const baseCandidates = uniqueStrings([swiftpayBaseUrl, swiftpayBaseUrl.replace(/\/api$/i, ""), baseWithApi]);
   const attemptedUrls = baseCandidates.map((b) => `${b}${endpointPath}`);
 
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const retryableStatus = new Set<number>([404, 502, 503, 504]);
+
   const doFetch = (url: string) =>
     fetch(url, {
       method: "POST",
@@ -140,17 +143,45 @@ export default async function handler(req: any, res: any) {
     });
 
   let upstreamUrl = attemptedUrls[0];
-  let upstreamRes = await doFetch(upstreamUrl);
+  let upstreamRes: any = undefined;
+  let upstreamText = "";
+  let upstreamJson: unknown = {};
+  let lastError: unknown = undefined;
+  let done = false;
 
-  for (let i = 1; upstreamRes.status === 404 && i < attemptedUrls.length; i += 1) {
-    upstreamUrl = attemptedUrls[i];
-    upstreamRes = await doFetch(upstreamUrl);
+  for (let pass = 0; pass < 2 && !done; pass += 1) {
+    if (pass > 0) await delay(800);
+
+    for (let i = 0; i < attemptedUrls.length; i += 1) {
+      upstreamUrl = attemptedUrls[i];
+      try {
+        upstreamRes = await doFetch(upstreamUrl);
+        upstreamText = await upstreamRes.text();
+        upstreamJson = safeJsonParse(upstreamText);
+
+        if (upstreamRes.ok || !retryableStatus.has(upstreamRes.status)) {
+          done = true;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+        upstreamRes = undefined;
+        upstreamText = "";
+        upstreamJson = {};
+      }
+
+      await delay(250);
+    }
   }
 
-  const upstreamText = await upstreamRes.text();
-  const upstreamJson = safeJsonParse(upstreamText);
-
   Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+
+  if (!upstreamRes) {
+    const message =
+      (lastError instanceof Error ? lastError.message : undefined) ??
+      "SwiftPay upstream unreachable. Please try again.";
+    return res.status(502).json({ status: "error", message, upstreamUrl, attemptedUrls });
+  }
 
   if (!upstreamRes.ok) {
     const message =
