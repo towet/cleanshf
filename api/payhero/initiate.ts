@@ -5,9 +5,6 @@ const corsHeaders: Record<string, string> = {
 };
 
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
-const PAYHERO_AUTH_TOKEN =
-  "Basic dTk1bDNaZTJCWEdZSlp3bXNWMnk6OUEzSWpXWGxiZGlCVEUzNHMzWURGZU53WE5hUmI5bnFpNXhZVGJ0RA==";
-const PAYHERO_CHANNEL_ID = 10811;
 
 function parseBody(req: { body?: unknown }): Record<string, unknown> {
   const raw = req.body;
@@ -45,9 +42,26 @@ function normalizePhoneNumber(phone: string | undefined | null): string | null {
   return null;
 }
 
-function getAuthHeader(): string {
-  const token = process.env.PAYHERO_AUTH_TOKEN ?? PAYHERO_AUTH_TOKEN;
-  return token.startsWith("Basic ") ? token : `Basic ${token}`;
+function getAuthHeader(): string | null {
+  const token = process.env.PAYHERO_AUTH_TOKEN?.trim();
+  if (token) {
+    return token.startsWith("Basic ") ? token : `Basic ${token}`;
+  }
+
+  const username = process.env.PAYHERO_API_USERNAME?.trim();
+  const password = process.env.PAYHERO_API_PASSWORD?.trim();
+  if (username && password) {
+    return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+  }
+
+  return null;
+}
+
+function getChannelId(): number | null {
+  const raw = process.env.PAYHERO_CHANNEL_ID?.trim();
+  if (!raw) return null;
+  const channelId = Number(raw);
+  return Number.isFinite(channelId) && channelId > 0 ? channelId : null;
 }
 
 function extractReference(data: Record<string, unknown>): string | null {
@@ -87,7 +101,15 @@ export default async function handler(req: any, res: any) {
   }
 
   const authHeader = getAuthHeader();
-  const channelId = Number(process.env.PAYHERO_CHANNEL_ID ?? PAYHERO_CHANNEL_ID);
+  const channelId = getChannelId();
+
+  if (!authHeader || !channelId) {
+    return res.status(500).json({
+      success: false,
+      message:
+        "PayHero is not configured. Set PAYHERO_AUTH_TOKEN (or PAYHERO_API_USERNAME + PAYHERO_API_PASSWORD) and PAYHERO_CHANNEL_ID.",
+    });
+  }
 
   try {
     const body = parseBody(req);

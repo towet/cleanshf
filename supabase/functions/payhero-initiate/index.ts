@@ -6,9 +6,6 @@ declare const Deno: {
 };
 
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
-const PAYHERO_AUTH_TOKEN =
-  "Basic dTk1bDNaZTJCWEdZSlp3bXNWMnk6OUEzSWpXWGxiZGlCVEUzNHMzWURGZU53WE5hUmI5bnFpNXhZVGJ0RA==";
-const PAYHERO_CHANNEL_ID = 10811;
 
 const corsHeaders: Record<string, string> = {
   "access-control-allow-origin": "*",
@@ -35,9 +32,26 @@ function normalizePhoneNumber(phone: string | undefined | null): string | null {
   return null;
 }
 
-function getAuthHeader(): string {
-  const token = Deno.env.get("PAYHERO_AUTH_TOKEN") ?? PAYHERO_AUTH_TOKEN;
-  return token.startsWith("Basic ") ? token : `Basic ${token}`;
+function getAuthHeader(): string | null {
+  const token = Deno.env.get("PAYHERO_AUTH_TOKEN")?.trim();
+  if (token) {
+    return token.startsWith("Basic ") ? token : `Basic ${token}`;
+  }
+
+  const username = Deno.env.get("PAYHERO_API_USERNAME")?.trim();
+  const password = Deno.env.get("PAYHERO_API_PASSWORD")?.trim();
+  if (username && password) {
+    return `Basic ${btoa(`${username}:${password}`)}`;
+  }
+
+  return null;
+}
+
+function getChannelId(): number | null {
+  const raw = Deno.env.get("PAYHERO_CHANNEL_ID")?.trim();
+  if (!raw) return null;
+  const channelId = Number(raw);
+  return Number.isFinite(channelId) && channelId > 0 ? channelId : null;
 }
 
 function extractReference(data: Record<string, unknown>): string | null {
@@ -74,7 +88,18 @@ Deno.serve(async (req: Request) => {
   }
 
   const authHeader = getAuthHeader();
-  const channelId = Number(Deno.env.get("PAYHERO_CHANNEL_ID") ?? PAYHERO_CHANNEL_ID);
+  const channelId = getChannelId();
+
+  if (!authHeader || !channelId) {
+    return jsonResponse(
+      {
+        status: "error",
+        message:
+          "PayHero is not configured. Set PAYHERO_AUTH_TOKEN (or PAYHERO_API_USERNAME + PAYHERO_API_PASSWORD) and PAYHERO_CHANNEL_ID.",
+      },
+      { status: 500 },
+    );
+  }
 
   try {
     const body = (await req.json()) as Record<string, unknown>;

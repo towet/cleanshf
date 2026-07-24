@@ -6,8 +6,6 @@ declare const Deno: {
 };
 
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
-const PAYHERO_AUTH_TOKEN =
-  "Basic dTk1bDNaZTJCWEdZSlp3bXNWMnk6OUEzSWpXWGxiZGlCVEUzNHMzWURGZU53WE5hUmI5bnFpNXhZVGJ0RA==";
 
 const corsHeaders: Record<string, string> = {
   "access-control-allow-origin": "*",
@@ -25,9 +23,19 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
   });
 }
 
-function getAuthHeader(): string {
-  const token = Deno.env.get("PAYHERO_AUTH_TOKEN") ?? PAYHERO_AUTH_TOKEN;
-  return token.startsWith("Basic ") ? token : `Basic ${token}`;
+function getAuthHeader(): string | null {
+  const token = Deno.env.get("PAYHERO_AUTH_TOKEN")?.trim();
+  if (token) {
+    return token.startsWith("Basic ") ? token : `Basic ${token}`;
+  }
+
+  const username = Deno.env.get("PAYHERO_API_USERNAME")?.trim();
+  const password = Deno.env.get("PAYHERO_API_PASSWORD")?.trim();
+  if (username && password) {
+    return `Basic ${btoa(`${username}:${password}`)}`;
+  }
+
+  return null;
 }
 
 function mapPayheroStatus(rawStatus: string): "paid" | "failed" | "pending" {
@@ -47,6 +55,16 @@ Deno.serve(async (req: Request) => {
   }
 
   const authHeader = getAuthHeader();
+  if (!authHeader) {
+    return jsonResponse(
+      {
+        status: "error",
+        message:
+          "PayHero is not configured. Set PAYHERO_AUTH_TOKEN (or PAYHERO_API_USERNAME + PAYHERO_API_PASSWORD).",
+      },
+      { status: 500 },
+    );
+  }
 
   try {
     const body = (await req.json()) as Record<string, unknown>;

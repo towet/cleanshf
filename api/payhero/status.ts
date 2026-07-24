@@ -5,8 +5,6 @@ const corsHeaders: Record<string, string> = {
 };
 
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
-const PAYHERO_AUTH_TOKEN =
-  "Basic dTk1bDNaZTJCWEdZSlp3bXNWMnk6OUEzSWpXWGxiZGlCVEUzNHMzWURGZU53WE5hUmI5bnFpNXhZVGJ0RA==";
 
 function parseBody(req: { body?: unknown }): Record<string, unknown> {
   const raw = req.body;
@@ -24,9 +22,19 @@ function parseBody(req: { body?: unknown }): Record<string, unknown> {
   return {};
 }
 
-function getAuthHeader(): string {
-  const token = process.env.PAYHERO_AUTH_TOKEN ?? PAYHERO_AUTH_TOKEN;
-  return token.startsWith("Basic ") ? token : `Basic ${token}`;
+function getAuthHeader(): string | null {
+  const token = process.env.PAYHERO_AUTH_TOKEN?.trim();
+  if (token) {
+    return token.startsWith("Basic ") ? token : `Basic ${token}`;
+  }
+
+  const username = process.env.PAYHERO_API_USERNAME?.trim();
+  const password = process.env.PAYHERO_API_PASSWORD?.trim();
+  if (username && password) {
+    return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+  }
+
+  return null;
 }
 
 function mapPayheroStatus(rawStatus: string): "paid" | "failed" | "pending" {
@@ -55,6 +63,13 @@ export default async function handler(req: any, res: any) {
   }
 
   const authHeader = getAuthHeader();
+  if (!authHeader) {
+    return res.status(500).json({
+      status: "error",
+      message:
+        "PayHero is not configured. Set PAYHERO_AUTH_TOKEN (or PAYHERO_API_USERNAME + PAYHERO_API_PASSWORD).",
+    });
+  }
 
   try {
     const body = parseBody(req);
