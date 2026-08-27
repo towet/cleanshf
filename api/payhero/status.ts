@@ -5,9 +5,11 @@ const corsHeaders: Record<string, string> = {
 };
 
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
-const PAYHERO_AUTH_TOKEN =
+const RAW_TOKEN = (
   process.env.PAYHERO_AUTH_TOKEN ||
-  "Basic QTV1NEp3S0dzZ1U1VHZvSTVDN1g6UDRaMUx0UnBjalcwUkcxVnNWT3p4ZjVpTG54SzBiQnVWN0tIQ09ETw==";
+  "Basic QTV1NEp3S0dzZ1U1VHZvSTVDN1g6UDRaMUx0UnBjalcwUkcxVnNWT3p4ZjVpTG54SzBiQnVWN0tIQ09ETw=="
+).trim();
+const PAYHERO_AUTH_TOKEN = RAW_TOKEN.startsWith("Basic ") ? RAW_TOKEN : `Basic ${RAW_TOKEN}`;
 
 async function parseRequestBody(req: any): Promise<Record<string, any>> {
   if (!req) return {};
