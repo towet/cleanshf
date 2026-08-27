@@ -61,9 +61,10 @@ function extractReference(data: Record<string, unknown>): string | null {
     data.reference ??
     data.Reference ??
     data.checkoutId ??
-    data.checkoutRequestId ??
-    data.CheckoutRequestID;
-  if (typeof direct === "string" && direct.trim()) return direct;
+    data.checkout_id ??
+    data.CheckoutRequestID ??
+    data.checkoutRequestId;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
 
   const nested = data.data;
   if (nested && typeof nested === "object") {
@@ -72,9 +73,10 @@ function extractReference(data: Record<string, unknown>): string | null {
       nestedObj.reference ??
       nestedObj.Reference ??
       nestedObj.checkoutId ??
-      nestedObj.checkoutRequestId ??
-      nestedObj.CheckoutRequestID;
-    if (typeof nestedRef === "string" && nestedRef.trim()) return nestedRef;
+      nestedObj.checkout_id ??
+      nestedObj.CheckoutRequestID ??
+      nestedObj.checkoutRequestId;
+    if (typeof nestedRef === "string" && nestedRef.trim()) return nestedRef.trim();
   }
 
   return null;

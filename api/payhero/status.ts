@@ -1,42 +1,46 @@
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
+const PAYHERO_AUTH_TOKEN =
+  process.env.PAYHERO_AUTH_TOKEN ||
+  "Basic QTV1NEp3S0dzZ1U1VHZvSTVDN1g6UDRaMUx0UnBjalcwUkcxVnNWT3p4ZjVpTG54SzBiQnVWN0tIQ09ETw==";
 
-function parseBody(req: { body?: unknown }): Record<string, unknown> {
-  const raw = req.body;
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return raw as Record<string, unknown>;
-  }
-  if (typeof raw === "string" && raw.trim()) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-    } catch {
-      return {};
+async function parseRequestBody(req: any): Promise<Record<string, any>> {
+  if (!req) return {};
+  if (req.body) {
+    if (typeof req.body === "object" && !Array.isArray(req.body)) {
+      return req.body;
+    }
+    if (typeof req.body === "string" && req.body.trim()) {
+      try {
+        const parsed = JSON.parse(req.body);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {}
     }
   }
+
+  // Handle incoming stream in Node/Vercel serverless functions
+  if (typeof req.on === "function") {
+    try {
+      const bodyStr = await new Promise<string>((resolve) => {
+        let raw = "";
+        req.on("data", (chunk: any) => {
+          raw += chunk;
+        });
+        req.on("end", () => resolve(raw));
+        req.on("error", () => resolve(""));
+      });
+      if (bodyStr.trim()) {
+        return JSON.parse(bodyStr);
+      }
+    } catch {}
+  }
+
   return {};
-}
-
-function getAuthHeader(): string | null {
-  const token =
-    process.env.PAYHERO_AUTH_TOKEN?.trim() ||
-    "Basic QTV1NEp3S0dzZ1U1VHZvSTVDN1g6UDRaMUx0UnBjalcwUkcxVnNWT3p4ZjVpTG54SzBiQnVWN0tIQ09ETw==";
-  if (token) {
-    return token.startsWith("Basic ") ? token : `Basic ${token}`;
-  }
-
-  const username = process.env.PAYHERO_API_USERNAME?.trim() || "A5u4JwKGsgU5TvoI5C7X";
-  const password = process.env.PAYHERO_API_PASSWORD?.trim() || "P4Z1LtRpcjW0RG1VsVOzxf5iLnxK0bBuV7KHCODO";
-  if (username && password) {
-    return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-  }
-
-  return null;
 }
 
 function mapPayheroStatus(rawStatus: string): "paid" | "failed" | "pending" {
@@ -60,28 +64,23 @@ export default async function handler(req: any, res: any) {
     return res.status(204).end();
   }
 
-  if (req.method !== "POST") {
+  if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const authHeader = getAuthHeader();
-  if (!authHeader) {
-    return res.status(500).json({
-      status: "error",
-      message:
-        "PayHero is not configured. Set PAYHERO_AUTH_TOKEN (or PAYHERO_API_USERNAME + PAYHERO_API_PASSWORD).",
-    });
-  }
-
   try {
-    const body = parseBody(req);
+    const body = await parseRequestBody(req);
+    const query = req.query || {};
+
     const reference =
       (typeof body.checkoutId === "string" ? body.checkoutId : undefined) ??
       (typeof body.checkoutRequestId === "string" ? body.checkoutRequestId : undefined) ??
-      (typeof body.reference === "string" ? body.reference : undefined);
+      (typeof body.reference === "string" ? body.reference : undefined) ??
+      (typeof query.checkoutId === "string" ? query.checkoutId : undefined) ??
+      (typeof query.reference === "string" ? query.reference : undefined);
 
     if (!reference) {
-      return res.status(400).json({ status: "error", message: "Missing checkoutId/reference" });
+      return res.status(400).json({ status: "error", message: "Missing checkoutId or reference" });
     }
 
     const payheroRes = await fetch(
@@ -89,17 +88,18 @@ export default async function handler(req: any, res: any) {
       {
         method: "GET",
         headers: {
-          Authorization: authHeader,
+          Authorization: PAYHERO_AUTH_TOKEN,
         },
       },
     );
 
-    const data = (await payheroRes.json().catch(() => null)) as Record<string, unknown> | null;
+    const data = (await payheroRes.json().catch(() => null)) as Record<string, any> | null;
 
     if (!payheroRes.ok || !data) {
-      return res.status(payheroRes.status || 500).json({
+      return res.status(payheroRes.status || 400).json({
         status: "error",
         message:
+          (typeof data?.error_message === "string" ? data.error_message : null) ??
           (typeof data?.message === "string" ? data.message : null) ??
           (typeof data?.error === "string" ? data.error : null) ??
           "Status check failed",
@@ -121,9 +121,9 @@ export default async function handler(req: any, res: any) {
         (typeof data.resultDesc === "string" ? data.resultDesc : "") ||
         rawStatus,
       receiptNumber:
-        (typeof data.provider_reference === "string" ? data.provider_reference : null) ??
-        (typeof data.third_party_reference === "string" ? data.third_party_reference : null) ??
-        (typeof data.payment_reference === "string" ? data.payment_reference : null),
+        (typeof data.payment_reference === "string" && data.payment_reference ? data.payment_reference : null) ??
+        (typeof data.third_party_reference === "string" && data.third_party_reference ? data.third_party_reference : null) ??
+        (typeof data.provider_reference === "string" && data.provider_reference ? data.provider_reference : null),
       raw: data,
     });
   } catch (err) {

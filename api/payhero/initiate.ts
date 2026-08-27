@@ -1,24 +1,46 @@
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 const PAYHERO_BASE_URL = "https://backend.payhero.co.ke";
+const PAYHERO_AUTH_TOKEN =
+  process.env.PAYHERO_AUTH_TOKEN ||
+  "Basic QTV1NEp3S0dzZ1U1VHZvSTVDN1g6UDRaMUx0UnBjalcwUkcxVnNWT3p4ZjVpTG54SzBiQnVWN0tIQ09ETw==";
+const PAYHERO_CHANNEL_ID = Number(process.env.PAYHERO_CHANNEL_ID || 11632);
 
-function parseBody(req: { body?: unknown }): Record<string, unknown> {
-  const raw = req.body;
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return raw as Record<string, unknown>;
-  }
-  if (typeof raw === "string" && raw.trim()) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-    } catch {
-      return {};
+async function parseRequestBody(req: any): Promise<Record<string, any>> {
+  if (!req) return {};
+  if (req.body) {
+    if (typeof req.body === "object" && !Array.isArray(req.body)) {
+      return req.body;
+    }
+    if (typeof req.body === "string" && req.body.trim()) {
+      try {
+        const parsed = JSON.parse(req.body);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {}
     }
   }
+
+  // Handle incoming stream in Node/Vercel serverless functions
+  if (typeof req.on === "function") {
+    try {
+      const bodyStr = await new Promise<string>((resolve) => {
+        let raw = "";
+        req.on("data", (chunk: any) => {
+          raw += chunk;
+        });
+        req.on("end", () => resolve(raw));
+        req.on("error", () => resolve(""));
+      });
+      if (bodyStr.trim()) {
+        return JSON.parse(bodyStr);
+      }
+    } catch {}
+  }
+
   return {};
 }
 
@@ -42,50 +64,29 @@ function normalizePhoneNumber(phone: string | undefined | null): string | null {
   return null;
 }
 
-function getAuthHeader(): string | null {
-  const token =
-    process.env.PAYHERO_AUTH_TOKEN?.trim() ||
-    "Basic QTV1NEp3S0dzZ1U1VHZvSTVDN1g6UDRaMUx0UnBjalcwUkcxVnNWT3p4ZjVpTG54SzBiQnVWN0tIQ09ETw==";
-  if (token) {
-    return token.startsWith("Basic ") ? token : `Basic ${token}`;
-  }
-
-  const username = process.env.PAYHERO_API_USERNAME?.trim() || "A5u4JwKGsgU5TvoI5C7X";
-  const password = process.env.PAYHERO_API_PASSWORD?.trim() || "P4Z1LtRpcjW0RG1VsVOzxf5iLnxK0bBuV7KHCODO";
-  if (username && password) {
-    return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-  }
-
-  return null;
-}
-
-function getChannelId(): number | null {
-  const raw = process.env.PAYHERO_CHANNEL_ID?.trim() || "11632";
-  if (!raw) return null;
-  const channelId = Number(raw);
-  return Number.isFinite(channelId) && channelId > 0 ? channelId : null;
-}
-
-function extractReference(data: Record<string, unknown>): string | null {
+function extractReference(data: Record<string, any>): string | null {
+  if (!data) return null;
   const direct =
     data.reference ??
     data.Reference ??
     data.checkoutId ??
-    data.checkoutRequestId ??
-    data.CheckoutRequestID;
+    data.checkout_id ??
+    data.CheckoutRequestID ??
+    data.checkoutRequestId;
 
-  if (typeof direct === "string" && direct.trim()) return direct;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
 
   const nested = data.data;
   if (nested && typeof nested === "object") {
-    const nestedObj = nested as Record<string, unknown>;
+    const nestedObj = nested as Record<string, any>;
     const nestedRef =
       nestedObj.reference ??
       nestedObj.Reference ??
       nestedObj.checkoutId ??
-      nestedObj.checkoutRequestId ??
-      nestedObj.CheckoutRequestID;
-    if (typeof nestedRef === "string" && nestedRef.trim()) return nestedRef;
+      nestedObj.checkout_id ??
+      nestedObj.CheckoutRequestID ??
+      nestedObj.checkoutRequestId;
+    if (typeof nestedRef === "string" && nestedRef.trim()) return nestedRef.trim();
   }
 
   return null;
@@ -102,34 +103,20 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const authHeader = getAuthHeader();
-  const channelId = getChannelId();
-
-  if (!authHeader || !channelId) {
-    return res.status(500).json({
-      success: false,
-      message:
-        "PayHero is not configured. Set PAYHERO_AUTH_TOKEN (or PAYHERO_API_USERNAME + PAYHERO_API_PASSWORD) and PAYHERO_CHANNEL_ID.",
-    });
-  }
-
   try {
-    const body = parseBody(req);
-    const rawPhone =
-      (typeof body.phone === "string" ? body.phone : undefined) ??
-      (typeof body.phoneNumber === "string" ? body.phoneNumber : undefined) ??
-      (typeof body.phone_number === "string" ? body.phone_number : undefined);
+    const body = await parseRequestBody(req);
+    const rawPhone = body.phone ?? body.phoneNumber ?? body.phone_number;
 
     const normalizedPhone = normalizePhoneNumber(rawPhone);
     if (!normalizedPhone) {
-      return res.status(400).json({ success: false, message: "Invalid phone number format" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number format. Please provide a valid Kenyan phone number.",
+        receivedBody: body,
+      });
     }
 
-    const amount = Number(body.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid amount" });
-    }
-
+    const amount = Number(body.amount) || 50;
     const referencePrefix =
       typeof body.referencePrefix === "string" ? body.referencePrefix : "CLEANSHELF";
     const externalReference =
@@ -140,7 +127,7 @@ export default async function handler(req: any, res: any) {
     const payload = {
       amount,
       phone_number: normalizedPhone,
-      channel_id: channelId,
+      channel_id: PAYHERO_CHANNEL_ID,
       provider: "m-pesa",
       external_reference: externalReference,
       customer_name: typeof body.customer_name === "string" ? body.customer_name : undefined,
@@ -151,20 +138,20 @@ export default async function handler(req: any, res: any) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeader,
+        Authorization: PAYHERO_AUTH_TOKEN,
       },
       body: JSON.stringify(payload),
     });
 
-    const data = (await payheroRes.json().catch(() => null)) as Record<string, unknown> | null;
+    const data = (await payheroRes.json().catch(() => null)) as Record<string, any> | null;
 
     if (!payheroRes.ok || !data) {
-      return res.status(payheroRes.status || 500).json({
+      return res.status(payheroRes.status || 400).json({
         success: false,
         message:
           (typeof data?.message === "string" ? data.message : null) ??
           (typeof data?.error === "string" ? data.error : null) ??
-          "Payment initiation failed",
+          "Payment initiation failed with PayHero",
         raw: data,
       });
     }
@@ -173,6 +160,7 @@ export default async function handler(req: any, res: any) {
     const success =
       data.success === true ||
       String(data.status ?? "").toLowerCase() === "success" ||
+      String(data.status ?? "").toLowerCase() === "queued" ||
       Boolean(checkoutId);
 
     if (!success || !checkoutId) {
@@ -189,7 +177,8 @@ export default async function handler(req: any, res: any) {
       success: true,
       checkoutId,
       checkoutRequestId: checkoutId,
-      reference: externalReference,
+      reference: checkoutId,
+      externalReference,
       normalizedPhone: `254${normalizedPhone.slice(1)}`,
       message: typeof data.message === "string" ? data.message : "STK push initiated",
       raw: data,
